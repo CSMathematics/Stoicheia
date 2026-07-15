@@ -1,0 +1,128 @@
+name: Build Stoicheia
+
+on:
+  push:
+    branches:
+      - main
+      - master
+      - release
+    tags:
+      - 'v*'
+      - 'stoicheia-v*'
+  pull_request:
+    branches:
+      - main
+      - master
+      - release
+  workflow_dispatch:
+
+jobs:
+  build-tauri:
+    name: Build ${{ matrix.name }}
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Linux
+            artifact_name: linux
+            platform: ubuntu-22.04
+            args: ''
+            no_strip: '1'
+            artifact_glob: src-tauri/target/release/bundle/**/*
+          - name: Windows
+            artifact_name: windows
+            platform: windows-latest
+            args: ''
+            artifact_glob: src-tauri/target/release/bundle/**/*
+          - name: macOS Apple Silicon
+            artifact_name: macos-aarch64
+            platform: macos-latest
+            args: --target aarch64-apple-darwin
+            rust_targets: aarch64-apple-darwin x86_64-apple-darwin
+            artifact_glob: src-tauri/target/aarch64-apple-darwin/release/bundle/**/*
+          - name: macOS Intel
+            artifact_name: macos-x86_64
+            platform: macos-latest
+            args: --target x86_64-apple-darwin
+            rust_targets: aarch64-apple-darwin x86_64-apple-darwin
+            artifact_glob: src-tauri/target/x86_64-apple-darwin/release/bundle/**/*
+
+    runs-on: ${{ matrix.platform }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Linux dependencies
+        if: matrix.platform == 'ubuntu-22.04'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            build-essential \
+            curl \
+            wget \
+            file \
+            libssl-dev \
+            libgtk-3-dev \
+            libayatana-appindicator3-dev \
+            librsvg2-dev \
+            patchelf \
+            xdg-utils \
+            libwebkit2gtk-4.1-dev
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: lts/*
+          cache: npm
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install macOS Rust targets
+        if: matrix.platform == 'macos-latest'
+        run: rustup target add ${{ matrix.rust_targets }}
+
+      - name: Rust cache
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: ./src-tauri -> target
+
+      - name: Install frontend dependencies
+        run: npm ci
+
+      - name: Run tests
+        run: npm test -- --run
+
+      - name: Check frontend bundle budget
+        if: matrix.platform == 'ubuntu-22.04'
+        run: npm run build:check
+
+      - name: Upload frontend bundle report
+        if: matrix.platform == 'ubuntu-22.04'
+        uses: actions/upload-artifact@v4
+        with:
+          name: frontend-bundle-report
+          path: dist/bundle-report.json
+          if-no-files-found: error
+
+      - name: Build Stoicheia
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          APPLE_SIGNING_IDENTITY: '-'
+          NO_STRIP: ${{ matrix.no_strip }}
+        with:
+          projectPath: .
+          tauriScript: npm run tauri
+          args: ${{ matrix.args }}
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: stoicheia-${{ matrix.artifact_name }}
+          path: ${{ matrix.artifact_glob }}
+          if-no-files-found: ignore

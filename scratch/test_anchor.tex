@@ -1,0 +1,15 @@
+\documentclass[tikz,border=2mm]{standalone}
+\usepackage{tkz-euclide}
+\begin{document}
+\begin{tikzpicture}
+  \tkzDefPoint(0,0){A}
+  \tkzDefPoint(4,0){B}
+  \tkzDefPoint(2,3){C}
+  \tkzDrawPolygon(A,B,C)
+  
+  % Anchors
+  \node at (0,0) {\special{dvisvgm:raw <g id="ITZ_ORIGIN" data-dvi-x="{?x}" data-dvi-y="{?y}" data-matrix="{?matrix}" />}};
+  \node at (1,0) {\special{dvisvgm:raw <g id="ITZ_UNIT_X" data-dvi-x="{?x}" data-dvi-y="{?y}" data-matrix="{?matrix}" />}};
+
+\end{tikzpicture}
+\end{document}
